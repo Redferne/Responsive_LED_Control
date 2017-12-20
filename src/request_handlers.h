@@ -2,8 +2,8 @@
 // Griswold LED Lighting Controller
 
 // Griswold is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as 
-// published by the Free Software Foundation, either version 3 of 
+// it under the terms of the GNU Lesser General Public License as
+// published by the Free Software Foundation, either version 3 of
 // the License, or (at your option) any later version.
 
 // This program is distributed in the hope that it will be useful,
@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-// Griswold is a fork of the LEDLAMP project at 
+// Griswold is a fork of the LEDLAMP project at
 //        https://github.com/russp81/LEDLAMP_FASTLEDs
 
 // The LEDLAMP project is a fork of the McLighting Project at
@@ -117,18 +117,19 @@ void handleNotFound() {
   server.send ( 404, "text/plain", message );
 }
 
-char* listStatusJSON() {
-  char json[512];
+char json_buf[512];
+
+void listStatusJSON() {
   File file;
-  openPaletteFileWithIndex(currentPaletteIndex, &file); 
-  snprintf_P(json, sizeof(json), PSTR("{\"mode\":%d, \"FPS\":%d,\"show_length\":%d, \"ftb_speed\":%d, \"overall_brightness\":%d, \"effect_brightness\":%d, \"color\":[%d, %d, %d], \"glitter_color\":[%d,%d,%d], \"glitter_density\":%d, \"glitter_on\":%d, \"confetti_density\":%d, \"palette_name\": \"%s\", \"glitter_wipe_on\": %d}"), settings.mode, settings.fps, settings.show_length, settings.ftb_speed, settings.overall_brightness, settings.effect_brightness, settings.main_color.red, settings.main_color.green, settings.main_color.blue, settings.glitter_color.red, settings.glitter_color.green, settings.glitter_color.blue, settings.glitter_density, settings.glitter_on, settings.confetti_dens, file.name(), settings.glitter_wipe_on);
+  openPaletteFileWithIndex(currentPaletteIndex, &file);
+  snprintf_P(json_buf, sizeof(json_buf), PSTR("{\"mode\":%d, \"FPS\":%d,\"show_length\":%d, \"ftb_speed\":%d, \"overall_brightness\":%d, \"effect_brightness\":%d, \"color\":[%d, %d, %d], \"glitter_color\":[%d,%d,%d], \"glitter_density\":%d, \"glitter_on\":%d, \"confetti_density\":%d, \"palette_name\": \"%s\", \"glitter_wipe_on\": %d}"), settings.mode, settings.fps, settings.show_length, settings.ftb_speed, settings.overall_brightness, settings.effect_brightness, settings.main_color.red, settings.main_color.green, settings.main_color.blue, settings.glitter_color.red, settings.glitter_color.green, settings.glitter_color.blue, settings.glitter_density, settings.glitter_on, settings.confetti_dens, file.name(), settings.glitter_wipe_on);
   file.close();
-  return json;
 }
 
 
 void getStatusJSON() {
-  server.send ( 200, "application/json", listStatusJSON() );
+  listStatusJSON();
+  server.send ( 200, "application/json", json_buf );
 }
 
 void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
@@ -169,7 +170,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         settings.glitter_color.blue = ((rgb >> 0) & 0xFF);
         DBG_OUTPUT_PORT.printf("Set glitter color to: [%u] [%u] [%u]\n", settings.glitter_color.red, settings.glitter_color.green, settings.glitter_color.blue);
         webSocket.sendTXT(num, "OK");
-      }      
+      }
 
       // # ==> Set delay
       if (payload[0] == '?') {
@@ -212,7 +213,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         settings.ftb_speed = ((b >> 0) & 0xFF);
         DBG_OUTPUT_PORT.printf("WS: Set fade to black speed to: [%u]\n", settings.ftb_speed);
         webSocket.sendTXT(num, "OK");
-      } 
+      }
 
       // # ==> Set fade glitter density
       if (payload[0] == '+') {
@@ -220,7 +221,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         settings.glitter_density = ((b >> 0) & 0xFF);
         DBG_OUTPUT_PORT.printf("WS: Set fade to glitter density to: [%u]\n", settings.glitter_density);
         webSocket.sendTXT(num, "OK");
-      }           
+      }
 
 
       // * ==> Set main color and light all LEDs (Shortcut)
@@ -256,7 +257,7 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
 
           for (uint8_t i = 0; i < NUM_LEDS; i++) {
             leds[i] = CRGB(ledstates[i].red, ledstates[i].green, ledstates[i].blue);
-            
+
           }
           FastLED.show();
         }
@@ -280,71 +281,71 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         }
         if (str_mode.startsWith("=mixedshow")) {
           settings.mode = MIXEDSHOW;
-        }    
+        }
         if (str_mode.startsWith("=rainbow")) {
           settings.mode = RAINBOW;
-        } 
+        }
         if (str_mode.startsWith("=confetti")) {
           settings.mode = CONFETTI;
-        } 
+        }
         if (str_mode.startsWith("=sinelon")) {
           settings.mode = SINELON;
-        } 
+        }
         if (str_mode.startsWith("=juggle")) {
           settings.mode = JUGGLE;
-        }          
+        }
         if (str_mode.startsWith("=bpm")) {
           settings.mode = BPM;
-        }  
+        }
         if (str_mode.startsWith("=palette_anims")) {
           if (settings.palette_ndx != -1) {
              currentPaletteIndex = settings.palette_ndx;
              loadPaletteFromFile(settings.palette_ndx, &targetPalette);
           }
           settings.mode = PALETTE_ANIMS;
-        }   
+        }
         if (str_mode.startsWith("=ripple")) {
           settings.mode = RIPPLE;
-        }   
+        }
         if (str_mode.startsWith("=comet")) {
           settings.mode = COMET;
-        }     
+        }
         if (str_mode.startsWith("=theaterchase")) {
           settings.mode = THEATERCHASE;
-        }                   
+        }
         if (str_mode.startsWith("=add_glitter")) {
           settings.glitter_on = true;
         }
         if (str_mode.startsWith("=stop_glitter")) {
           settings.glitter_on = false;
-        }                                                                                   
+        }
         if (str_mode.startsWith("=start_glitter_wipe")) {
           settings.glitter_wipe_on = true;
-        }                                                                                   
+        }
         if (str_mode.startsWith("=stop_glitter_wipe")) {
           settings.glitter_wipe_on = false;
-        }                                                                                   
+        }
         if (str_mode.startsWith("=wipe")) {
           settings.mode = WIPE;
-        }                                                                                   
+        }
         if (str_mode.startsWith("=tv")) {
           settings.mode = TV;
         }
         if (str_mode.startsWith("=fire")) {
           settings.mode = FIRE;
-        }   
+        }
         if (str_mode.startsWith("=frainbow")) {
           settings.mode = FIRE_RAINBOW;
-        }   
+        }
         if (str_mode.startsWith("=fworks")) {
           settings.mode = FIREWORKS;
         }
         if (str_mode.startsWith("=fwsingle")) {
           settings.mode = FIREWORKS_SINGLE;
-        }           
+        }
         if (str_mode.startsWith("=fwrainbow")) {
           settings.mode = FIREWORKS_RAINBOW;
-        }                                                                                              
+        }
         DBG_OUTPUT_PORT.printf("Activated mode [%u]!\n", settings.mode);
         webSocket.sendTXT(num, "OK");
       }
@@ -352,82 +353,85 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
       // $ ==> Get status Info.
       if (payload[0] == '$') {
         DBG_OUTPUT_PORT.printf("Get status info.");
-        
-        String json = listStatusJSON();
-        DBG_OUTPUT_PORT.println(json);
-        webSocket.sendTXT(num, json);
+
+        listStatusJSON();
+        DBG_OUTPUT_PORT.println(json_buf);
+        webSocket.sendTXT(num, json_buf);
       }
 
       // ` ==> Restore defaults.
       if (payload[0] == '`') {
         DBG_OUTPUT_PORT.printf("Restore defaults.");
         loadDefaults();
-        String json = listStatusJSON();
-        DBG_OUTPUT_PORT.println(json);
-        webSocket.sendTXT(num, json);
+        listStatusJSON();
+        DBG_OUTPUT_PORT.println(json_buf);
+        webSocket.sendTXT(num, json_buf);
       }
 
       // | ==> Save settings.
       if (payload[0] == '|') {
         DBG_OUTPUT_PORT.printf("Save settings.");
         saveSettings();
-        webSocket.sendTXT(num, "OK");      
+        webSocket.sendTXT(num, "OK");
       }
 
       // \ ==> Load settings.
       if (payload[0] == '\\') {
         DBG_OUTPUT_PORT.printf("Load settings.");
         readSettings(false);
-        
-        String json = listStatusJSON();
-        DBG_OUTPUT_PORT.println(json);
-        webSocket.sendTXT(num, json);
+
+        listStatusJSON();
+        DBG_OUTPUT_PORT.println(json_buf);
+        webSocket.sendTXT(num, json_buf);
       }
 
       // { ==> Change palette
       if (payload[0] == '{') {
         if (length == 2) {
           if (payload[1] == '+') {
-            DBG_OUTPUT_PORT.printf("Current pallet_ndx=%d\n", settings.palette_ndx);      
+            DBG_OUTPUT_PORT.printf("Current pallet_ndx=%d\n", settings.palette_ndx);
             settings.palette_ndx++;
             if (settings.palette_ndx >= paletteCount) {
-              settings.palette_ndx = 0;              
+              settings.palette_ndx = 0;
             }
-            
+
             targetPaletteIndex = settings.palette_ndx;
             loadPaletteFromFile(settings.palette_ndx, &targetPalette);
-            
+
             if (settings.glitter_wipe_on) {
               wipeInProgress = true;
             }
-            
-            DBG_OUTPUT_PORT.printf("Next palette: %d\n", settings.palette_ndx);            
+
+            DBG_OUTPUT_PORT.printf("Next palette: %d\n", settings.palette_ndx);
+            currentPaletteIndex = settings.palette_ndx;
             } else if (payload[1] == '-') {
-            DBG_OUTPUT_PORT.printf("Current pallet_ndx=%d\n", settings.palette_ndx);      
+            DBG_OUTPUT_PORT.printf("Current pallet_ndx=%d\n", settings.palette_ndx);
             settings.palette_ndx--;
             if (settings.palette_ndx < 0) {
-              settings.palette_ndx = paletteCount-1;              
+              settings.palette_ndx = paletteCount-1;
             }
-            
+
             targetPaletteIndex = settings.palette_ndx;
             loadPaletteFromFile(settings.palette_ndx, &targetPalette);
-            
+
             if (settings.glitter_wipe_on) {
               wipeInProgress = true;
             }
-            DBG_OUTPUT_PORT.printf("Next palette: %d\n", settings.palette_ndx);            
+            DBG_OUTPUT_PORT.printf("Previous palette: %d\n", settings.palette_ndx);
+            currentPaletteIndex = settings.palette_ndx;
             } else if (payload[1] == 'r') {
             DBG_OUTPUT_PORT.printf("Randomize palette.\n");
-            settings.palette_ndx = -1;          
+            settings.palette_ndx = -1;
             ChangePalettePeriodically(true);
+            currentPaletteIndex = settings.palette_ndx;
           } else if (payload[1] == 'd') {
             DBG_OUTPUT_PORT.printf("Change direction: %d\n", anim_direction);
             anim_direction = (DIRECTION)!anim_direction;
           }
         }
-        String json = listStatusJSON();
-        DBG_OUTPUT_PORT.println(json);
-        webSocket.sendTXT(num, json);
+        listStatusJSON();
+        DBG_OUTPUT_PORT.println(json_buf);
+        webSocket.sendTXT(num, json_buf);
       }
 
       // " ==> Confetti Density

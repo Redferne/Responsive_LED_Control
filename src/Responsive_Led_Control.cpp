@@ -2,8 +2,8 @@
 // Griswold LED Lighting Controller
 
 // Griswold is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as 
-// published by the Free Software Foundation, either version 3 of 
+// it under the terms of the GNU Lesser General Public License as
+// published by the Free Software Foundation, either version 3 of
 // the License, or (at your option) any later version.
 
 // This program is distributed in the hope that it will be useful,
@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-// Griswold is a fork of the LEDLAMP project at 
+// Griswold is a fork of the LEDLAMP project at
 //        https://github.com/russp81/LEDLAMP_FASTLEDs
 
 // The LEDLAMP project is a fork of the McLighting Project at
@@ -23,22 +23,33 @@
 // ***************************************************************************
 // Load libraries for: WebServer / WiFiManager / WebSockets
 // ***************************************************************************
+#if defined(ESP32)
+#include <WiFi.h>
+#ifndef BUILTIN_LED
+#define BUILTIN_LED 2
+#endif
+#else
 #include <ESP8266WiFi.h>  //https://github.com/esp8266/Arduino
+#endif
 
 // needed for library WiFiManager
-#include <DNSServer.h>
+#include <DNSServer.h> // ESP32 -> https://github.com/zhouhan0126/DNSServer---esp32.git
 #include <ESP8266WebServer.h>
-#include <WiFiManager.h>  //https://github.com/tzapu/WiFiManager
+#include <WiFiManager.h>  // https://github.com/bbx10/WiFiManager.git (esp32 branch)
 
 #include <ArduinoOTA.h>
+#if defined (ESP32)
+#include <ESPmDNS.h>
+#else
 #include <ESP8266mDNS.h>
+#endif
 #include <FS.h>
 #include <WiFiClient.h>
 
-#include <Ticker.h>
+#include <SimpleTimer.h>  //https://github.com/schinken/SimpleTimer.git
 #include "RemoteDebug.h" //https://github.com/JoaoLopesF/RemoteDebug
 
-#include <WebSockets.h>  //https://github.com/Links2004/arduinoWebSockets
+#include <WebSockets.h>  //https://github.com/Links2004/arduinoWebSockets (esp32 branch)
 #include <WebSocketsServer.h>
 
 // ***************************************************************************
@@ -50,15 +61,25 @@
 #include "colormodes.h"
 
 // ***************************************************************************
+// Forward Declarations
+// ***************************************************************************
+void nextPattern(void);
+
+// ***************************************************************************
 // Instanciate HTTP(80) / WebSockets(81) Server
 // ***************************************************************************
+#if defined(ESP32)
+WebServer server(80);
+#else
 ESP8266WebServer server(80);
+#endif
 WebSocketsServer webSocket = WebSocketsServer(81);
 
 // ***************************************************************************
-// Load library "ticker" for blinking status led
+// Load library SimpleTimer for blinking status led
 // ***************************************************************************
-Ticker ticker;
+SimpleTimer timer;
+int ticker;
 
 void tick() {
   // toggle state
@@ -76,14 +97,14 @@ void configModeCallback(WiFiManager *myWiFiManager) {
   // if you used auto generated SSID, print it
   DBG_OUTPUT_PORT.println(myWiFiManager->getConfigPortalSSID());
   // entered config mode, make led toggle faster
-  ticker.attach(0.2, tick);
-  
+  ticker = timer.setInterval(200, tick);
+
   // Show USER that module can't connect to stored WiFi
   uint16_t i;
   for (i = 0; i < NUM_LEDS; i++) {
     leds[i].setRGB(0, 0, 50);
   }
-  FastLED.show(); 
+  FastLED.show();
 }
 
 // ***************************************************************************
@@ -95,13 +116,17 @@ void configModeCallback(WiFiManager *myWiFiManager) {
 // ***************************************************************************
 // MAIN
 // ***************************************************************************
-void setup() {  
-  
+void setup() {
+
   // Generate a pseduo-unique hostname
   char hostname[strlen(HOSTNAME_PREFIX)+6];
+  #if defined (ESP32)
+  uint64_t chipid = ESP.getEfuseMac();
+  sprintf(hostname, "%s-%04x",HOSTNAME_PREFIX, (uint16_t)(chipid>>32));
+  #else
   uint16_t chipid = ESP.getChipId() & 0xFFFF;
   sprintf(hostname, "%s-%04x",HOSTNAME_PREFIX, chipid);
-  
+  #endif
 #ifdef REMOTE_DEBUG
   Debug.begin(hostname);  // Initiaze the telnet server - hostname is the used
                           // in MDNS.begin
@@ -126,13 +151,17 @@ void setup() {
 #ifndef REMOTE_DEBUG
   DBG_OUTPUT_PORT.begin(115200);
 #endif
+  #if defined(ESP32)
+  DBG_OUTPUT_PORT.printf("system_get_cpu_freq: %d\n", ESP.getCpuFreqMHz());
+  #else
   DBG_OUTPUT_PORT.printf("system_get_cpu_freq: %d\n", system_get_cpu_freq());
+  #endif
+
 
   // set builtin led pin as output
   pinMode(BUILTIN_LED, OUTPUT);
-  // start ticker with 0.5 because we start in AP mode and try to connect
-  ticker.attach(0.5, tick);
-
+  // start timer with 500ms because we start in AP mode and try to connect
+  ticker = timer.setInterval(500, tick);
  // ***************************************************************************
   // Setup: FASTLED
   // ***************************************************************************
@@ -147,12 +176,12 @@ void setup() {
   // tell FastLED about the LED strip configuration
   FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS)
       .setCorrection(TypicalLEDStrip);
-  
+
   // FastLED.addLeds<LED_TYPE,DATA_PIN,CLK_PIN,COLOR_ORDER>(leds,
   // NUM_LEDS).setCorrection(TypicalLEDStrip);
   // set master brightness control
   FastLED.setBrightness(settings.overall_brightness);
-  
+
 
   // ***************************************************************************
   // Setup: WiFiManager
@@ -172,17 +201,21 @@ void setup() {
   // here  "AutoConnectAP"
   // and goes into a blocking loop awaiting configuration
 
-  
+
   if (!wifiManager.autoConnect(hostname)) {
     DBG_OUTPUT_PORT.println("failed to connect and hit timeout");
     // reset and try again, or maybe put it to deep sleep
+    #if defined(ESP32)
+    ESP.restart();
+    #else
     ESP.reset();
+    #endif
     delay(1000);
   }
 
   // if you get here you have connected to the WiFi
   DBG_OUTPUT_PORT.println("connected...yeey :)");
-  ticker.detach();
+  timer.disable(ticker);
   // keep LED on
   digitalWrite(BUILTIN_LED, LOW);
 
@@ -197,12 +230,12 @@ void setup() {
 //      type = "sketch";
 //    else
 //      type = "filesystem";
-//      
+//
     SPIFFS.end(); // unmount SPIFFS for update.
     // DBG_OUTPUT_PORT.println("Start updating " + type);
     DBG_OUTPUT_PORT.println("Start updating ");
   });
-  ArduinoOTA.onEnd([]() { 
+  ArduinoOTA.onEnd([]() {
     DBG_OUTPUT_PORT.println("\nEnd... remounting SPIFFS");
     SPIFFS.begin();
     paletteCount = getPaletteCount();
@@ -229,7 +262,7 @@ void setup() {
   DBG_OUTPUT_PORT.print("IP address: ");
   DBG_OUTPUT_PORT.println(WiFi.localIP());
 
- 
+
   // ***************************************************************************
   // Setup: MDNS responder
   // ***************************************************************************
@@ -247,12 +280,30 @@ void setup() {
   // ***************************************************************************
   // Setup: SPIFFS
   // ***************************************************************************
+  #if defined (ESP32)
+  if(!SPIFFS.begin(true)){
+      DBG_OUTPUT_PORT.println("SPIFFS Mount Failed");
+  }
+  #else
   SPIFFS.begin();
+  #endif
   {
+    #if defined (ESP32)
+    File root = SPIFFS.open("/");
+    File file;
+    #else
     Dir dir = SPIFFS.openDir("/");
+    #endif
+    #if defined (ESP32)
+    while (file = root.openNextFile()) {
+      String fileName = file.name();
+      size_t fileSize = file.size();
+      file.close();
+    #else
     while (dir.next()) {
       String fileName = dir.fileName();
       size_t fileSize = dir.fileSize();
+    #endif
       DBG_OUTPUT_PORT.printf("FS File: %s, size: %s\n", fileName.c_str(),
                              formatBytes(fileSize).c_str());
     }
@@ -265,32 +316,36 @@ void setup() {
 
   // list directory
   server.on("/list", HTTP_GET, handleFileList);
-  
+
   // load editor
   server.on("/edit", HTTP_GET, []() {
     if (!handleFileRead("/edit.htm"))
       server.send(404, "text/plain", "FileNotFound");
   });
-  
+
   // create file
   server.on("/edit", HTTP_PUT, handleFileCreate);
-  
+
   // delete file
   server.on("/edit", HTTP_DELETE, handleFileDelete);
-  
+
   // first callback is called after the request has ended with all parsed
   // arguments
   // second callback handles file uploads at that location
   server.on("/edit", HTTP_POST, []() { server.send(200, "text/plain", ""); },
             handleFileUpload);
-  
+
   // get heap status, analog input value and all GPIO statuses in one json call
   server.on("/esp_status", HTTP_GET, []() {
     String json = "{";
     json += "\"heap\":" + String(ESP.getFreeHeap());
     json += ", \"analog\":" + String(analogRead(A0));
     json += ", \"gpio\":" +
+            #if defined(ESP32)
+            String((uint32_t)(((GPIO_IN_REG | GPIO_OUT_REG) & 0xFFFF) | ((GPIO_IN1_REG | GPIO_OUT1_REG) << 16)));
+            #else
             String((uint32_t)(((GPI | GPO) & 0xFFFF) | ((GP16I & 0x01) << 16)));
+            #endif
     json += "}";
     server.send(200, "text/json", json);
     json = String();
@@ -435,7 +490,7 @@ void setup() {
     getStatusJSON();
   });
 
-  server.on("/tv", []() {    
+  server.on("/tv", []() {
     settings.mode = TV;
     getArgs();
     getStatusJSON();
@@ -475,14 +530,14 @@ server.on("/fire", []() {
     getArgs();
     getStatusJSON();
   });
-  
-  server.on("/palette_anims", []() {    
+
+  server.on("/palette_anims", []() {
     settings.mode = PALETTE_ANIMS;
     if (server.arg("p") != "") {
       uint8_t pal = (uint8_t) strtol(server.arg("p").c_str(), NULL, 10);
-      if (pal > paletteCount) 
+      if (pal > paletteCount)
         pal = paletteCount;
-             
+
       settings.palette_ndx = pal;
       loadPaletteFromFile(settings.palette_ndx, &targetPalette);
       currentPalette = targetPalette; //PaletteCollection[settings.palette_ndx];
@@ -490,33 +545,38 @@ server.on("/fire", []() {
     }
     getStatusJSON();
   });
-  
+
   server.begin();
 
   paletteCount = getPaletteCount();
 }
+
+static long int avg_time = 0;
+static uint32_t avg_cnt = 0;
 
 void loop() {
   EVERY_N_MILLISECONDS(int(float(1000 / settings.fps))) {
     gHue++;  // slowly cycle the "base color" through the rainbow
   }
 
+  timer.run();
+
   // Simple statemachine that handles the different modes
   switch (settings.mode) {
     default:
-    case OFF: 
+    case OFF:
       fill_solid(leds, NUM_LEDS, CRGB(0,0,0));
       break;
-      
-    case ALL: 
+
+    case ALL:
       fill_solid(leds, NUM_LEDS,  CRGB(settings.main_color.red, settings.main_color.green,
                          settings.main_color.blue));
       break;
 
-    case MIXEDSHOW: 
-      {     
+    case MIXEDSHOW:
+      {
         gPatterns[gCurrentPatternNumber]();
-      
+
         // send the 'leds' array out to the actual LED strip
         int showlength_Millis = settings.show_length * 1000;
 
@@ -529,7 +589,7 @@ void loop() {
         }
       }
       break;
-      
+
     case RAINBOW:
       rainbow();
       break;
@@ -573,7 +633,7 @@ void loop() {
     case TV:
       tv();
       break;
-    
+
     case FIRE:
       fire2012();
       break;
@@ -585,11 +645,11 @@ void loop() {
     case FIREWORKS:
       fireworks();
       break;
-    
+
     case FIREWORKS_SINGLE:
       fw_single();
       break;
-    
+
     case FIREWORKS_RAINBOW:
       fw_rainbow();
       break;
@@ -601,39 +661,41 @@ void loop() {
   }
 
   // Get the current time
-  unsigned long continueTime = millis() + int(float(1000 / settings.fps));  
+  unsigned long continueTime = millis() + int(float(1000 / settings.fps));
   // Do our main loop functions, until we hit our wait time
-  
+
   do {
-    //long int now = micros();
-    FastLED.show();         // Display whats rendered.    
-    //long int later = micros();
-    //DBG_OUTPUT_PORT.printf("Show time is %ld\n", later-now);
+    long int now = micros();
+    FastLED.show();         // Display whats rendered.
+    long int later = micros();
+    avg_time += (later-now);
+    if (avg_cnt++ >= 500) {
+      DBG_OUTPUT_PORT.printf("Average render-time is %ld us\n", avg_time/avg_cnt);
+      avg_time = avg_cnt = 0;
+    }
     server.handleClient();  // Handle requests to the web server
     webSocket.loop();       // Handle websocket traffic
     ArduinoOTA.handle();    // Handle OTA requests.
 #ifdef REMOTE_DEBUG
     Debug.handle();         // Handle telnet server
-#endif         
+#endif
     yield();                // Yield for ESP8266 stuff
 
  if (WiFi.status() != WL_CONNECTED) {
       // Blink the LED quickly to indicate WiFi connection lost.
-      ticker.attach(0.1, tick);
-     
+      ticker = timer.setInterval(100, tick);
+
       //EVERY_N_MILLISECONDS(1000) {
-      //  int state = digitalRead(BUILTIN_LED);  // get the current state of GPIO1 pin      
+      //  int state = digitalRead(BUILTIN_LED);  // get the current state of GPIO1 pin
       //  digitalWrite(BUILTIN_LED, !state);
       // }
-    } else {      
-      ticker.detach();
+    } else {
+      timer.disable(ticker);
       // Light on-steady indicating WiFi is connected.
       //digitalWrite(BUILTIN_LED, false);
     }
-    
-  } while (millis() < continueTime);
 
-  
+  } while (millis() < continueTime);
 }
 
 void nextPattern() {

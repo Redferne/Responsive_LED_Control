@@ -2,8 +2,8 @@
 // Griswold LED Lighting Controller
 
 // Griswold is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as 
-// published by the Free Software Foundation, either version 3 of 
+// it under the terms of the GNU Lesser General Public License as
+// published by the Free Software Foundation, either version 3 of
 // the License, or (at your option) any later version.
 
 // This program is distributed in the hope that it will be useful,
@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-// Griswold is a fork of the LEDLAMP project at 
+// Griswold is a fork of the LEDLAMP project at
 //        https://github.com/russp81/LEDLAMP_FASTLEDs
 
 // The LEDLAMP project is a fork of the McLighting Project at
@@ -25,7 +25,7 @@
 // ***************************************************************************
 //#include "definitions.h"
 
-char* listStatusJSON();
+void listStatusJSON();
 
 extern WebSocketsServer webSocket;
 
@@ -121,7 +121,7 @@ void FillLEDsFromPaletteColors(CRGBPalette16 palette, uint8_t paletteStartIndex,
 
   for (int i = 0; i < NUM_LEDS; i++) {
     if (i > endingLEDIndex) return;  //stop condition
-    
+
     // leds[i] = ColorFromPalette( currentPalette, colorIndex + sin8(i*16),
     // brightness);
     leds[i] = ColorFromPalette(palette, colorIndex,
@@ -147,7 +147,8 @@ void ChangePalettePeriodically(bool forceNow) {
 
     loadPaletteFromFile(targetPaletteIndex, &targetPalette);
 
-    DBG_OUTPUT_PORT.printf("New pallet index: %d\n", targetPaletteIndex);
+    settings.palette_ndx = targetPaletteIndex;
+    DBG_OUTPUT_PORT.printf("New palette index: %d\n", targetPaletteIndex);
 
     if (settings.glitter_wipe_on) {
        DBG_OUTPUT_PORT.println("Begin glitter wipe");
@@ -167,7 +168,7 @@ void colorWipe() {
     gHue += 60;
     currentColor = CHSV(gHue, 255, settings.effect_brightness);
   }
-  
+
   // Render the first half of the wipe
   for (int x=0; x<wipePos; x++) {
     leds[x] = currentColor;
@@ -184,10 +185,10 @@ void colorWipe() {
       if (speckle >= 0 && speckle < NUM_LEDS) {
           leds[speckle] +=  CRGB(settings.glitter_color.red, settings.glitter_color.green,
                settings.glitter_color.blue);
-      }    
+      }
     }
   }
-  
+
   // Advance for next frame
   wipePos+=WIPE_SPEED;
 }
@@ -204,13 +205,13 @@ void palette_anims() {
     // Update the current palette if necessary-- and send to any connected clients.
     if (currentPaletteIndex != targetPaletteIndex) {
       currentPaletteIndex = targetPaletteIndex;
-    
+
       // Send current palette name to the UI.
       String name = getPaletteNameWithIndex(currentPaletteIndex);
       webSocket.broadcastTXT("p"+name);
     }
   }
-  
+
   static uint8_t startIndex = 0;
 
   /* motion speed */
@@ -228,7 +229,7 @@ void palette_anims() {
 
       // Send current palette name to the UI.
       String name = getPaletteNameWithIndex(currentPaletteIndex);
-      webSocket.broadcastTXT("p"+name);      
+      webSocket.broadcastTXT("p"+name);
       FillLEDsFromPaletteColors(targetPalette,startIndex);
     } else {
       FillLEDsFromPaletteColors(targetPalette,startIndex, wipePos);
@@ -237,13 +238,13 @@ void palette_anims() {
         if (speckle >= 0 && speckle < NUM_LEDS) {
             leds[speckle] +=  CRGB(settings.glitter_color.red, settings.glitter_color.green,
                  settings.glitter_color.blue);
-        }  
+        }
       }
       wipePos+=WIPE_SPEED;
     }
   }
 
-  
+
 }
 
 //*****************LED RIPPLE*****************************************************
@@ -370,7 +371,7 @@ unsigned long currentDipTime;
 unsigned long dipStartTime;
 unsigned long currentMillis;
 int ledState = LOW;
-long previousMillis = 0; 
+long previousMillis = 0;
 int ledBrightness[NUM_LEDS];
 uint16_t ledHue[NUM_LEDS];
 int led = 5;
@@ -406,17 +407,17 @@ void tv() {
       previousMillis = currentMillis;
       interval = random(750,4001);//Adjusts the interval for more/less frequent random light changes
       twitch = random(40,100);// Twitch provides motion effect but can be a bit much if too high
-      dipCount++;      
+      dipCount++;
     }
     if (currentMillis-previousMillis<twitch) {
       led=random(0, NUM_LEDS-1);
       analogLevel=random(50,255);// set the range of the 3 pwm leds
       ledState = ledState == LOW ? HIGH: LOW; // if the LED is off turn it on and vice-versa:
-      
-      
+
+
       _tvUpdateLed(led, (ledState) ? 255 : 0);
-      
-      if (dipCount > dipInterval) { 
+
+      if (dipCount > dipInterval) {
         //DBG_OUTPUT_PORT.println("dip");
         timeToDip = true;
         dipCount = 0;
@@ -424,7 +425,7 @@ void tv() {
         darkTime = random(50,150);
         dipInterval = random(5,250);// cycles of flicker
       }
-    } 
+    }
   } else {
     //DBG_OUTPUT_PORT.println("Dip Time");
     currentDipTime = millis();
@@ -437,7 +438,7 @@ void tv() {
     }
   }
 
-  // Render the thing, with a little flicker  
+  // Render the thing, with a little flicker
   uint8_t flicker = 255;
   int sat = 200;
 
@@ -445,21 +446,21 @@ void tv() {
     flicker = random(220,255);
     sat = random(180, 220);
   }
-  
+
   for (int i=0; i<NUM_LEDS; i++) {
     uint16_t index = (i%3 == 0) ? 400 : random(0,767);
     //leds[i] = ((index >> 8) % 3, 200, ledBrightness[i]);
-    
+
     leds[i] = hsb2rgbAN1(ledHue[i], sat, ledBrightness[i]).nscale8_video(flicker);
   }
 }
 
 // Fire2012 by Mark Kriegsman, July 2012
 // as part of "Five Elements" shown here: http://youtu.be/knWiGsmgycY
-//// 
+////
 // This basic one-dimensional 'fire' simulation works roughly as follows:
 // There's a underlying array of 'heat' cells, that model the temperature
-// at each point along the line.  Every cycle through the simulation, 
+// at each point along the line.  Every cycle through the simulation,
 // four steps are performed:
 //  1) All cells cool down a little bit, losing heat to the air
 //  2) The heat from each cell drifts 'up' and diffuses a little
@@ -470,7 +471,7 @@ void tv() {
 // Temperature is in arbitrary units from 0 (cold black) to 255 (white hot).
 //
 // This simulation scales it self a bit depending on NUM_LEDS; it should look
-// "OK" on anywhere from 20 to 100 LEDs without too much tweaking. 
+// "OK" on anywhere from 20 to 100 LEDs without too much tweaking.
 //
 // I recommend running this simulation at anywhere from 30-100 frames per second,
 // meaning an interframe delay of about 10-35 milliseconds.
@@ -484,7 +485,7 @@ void tv() {
 //
 // COOLING: How much does the air cool as it rises?
 // Less cooling = taller flames.  More cooling = shorter flames.
-// Default 55, suggested range 20-100 
+// Default 55, suggested range 20-100
 #define COOLING  80
 
 // SPARKING: What chance (out of 255) is there that a new spark will be lit?
@@ -499,7 +500,7 @@ boolean _firerainbow = false; // used for rainbow mode
 
 void fire2012()
 {
-  
+
 // Array of temperature readings at each simulation cell
   static byte heat[NUM_LEDS];
   static byte heat2[NUM_LEDS];
@@ -510,15 +511,15 @@ void fire2012()
       heat[i] = qsub8( heat[i],  random8(0, ((settings.ftb_speed * 20) / NUM_LEDS) + 2)); // modified with FTBspeed
       heat2[i] = qsub8( heat2[i],  random8(0, ((settings.ftb_speed * 20) / NUM_LEDS) + 2)); // modified with FTBspeed
     }
-  
+
     // Step 2.  Heat from each cell drifts 'up' and diffuses a little
     for( int k= NUM_LEDS - 1; k >= 2; k--) {
-      
+
       heat[k] = (heat[k - 1] + heat[k - 2] + heat[k - 2] ) / 3;
       heat2[k] = (heat2[k - 1] + heat2[k - 2] + heat2[k - 2] ) / 3;
-    
+
     }
-        
+
     // Step 3.  Randomly ignite new 'sparks' of heat near the bottom
     // if( random8() < SPARKING ) { // Original with SPARKING
     if( random8() < settings.show_length ) { // Modified with show_length
@@ -556,16 +557,16 @@ void fire2012()
   }
 
 ////frame has been created, now show it
-//  FastLED.show();  
+//  FastLED.show();
 //  // insert a delay to keep the framerate modest
 //  FastLED.delay(int(float(1000/FPS)));
-    
+
 }
 
 void fire_rainbow() {
   _firerainbow = true;
   fire2012();
-  
+
 }
 
 
@@ -580,7 +581,7 @@ void fireworks() {
 
 // fadeToBlackBy( leds, NUM_LEDS, ftb_speed);
 
- 
+
   uint32_t px_rgb = 0;
   byte px_r = 0;
   byte px_g = 0;
@@ -589,7 +590,7 @@ void fireworks() {
 
   for(uint16_t i=0; i < NUM_LEDS; i++) {
 
-    
+
 
     //leds[i] /= 2; // fade out (divide by 2)
     leds[i].nscale8(130 - int(float(settings.ftb_speed*0.5)));
@@ -631,7 +632,7 @@ px_g = random8();
 px_b = random8();
 
 
-  
+
     for(uint16_t i=0; i<_max(1,NUM_LEDS/20); i++) {
       if(random8(settings.show_length + 4) == 0) {
         //Adafruit_NeoPixel::setPixelColor(random(_led_count), _mode_color);
@@ -639,24 +640,24 @@ px_b = random8();
         if(_singlecolor){
           leds[pixel] = CRGB(settings.main_color.red,settings.main_color.green,settings.main_color.blue); // tails are in single color from set color on web interface
         } else if(_rainbow) {
-          leds[pixel] = CHSV( gHue, 255, settings.effect_brightness); // Rainbow cycling color  
+          leds[pixel] = CHSV( gHue, 255, settings.effect_brightness); // Rainbow cycling color
         } else if(!_singlecolor && !_rainbow) {
           leds[pixel].setRGB(px_r, px_g, px_b); // Multicolored tale
-          
+
         }
         leds[pixel].maximizeBrightness();
 
 
-        
+
       }
     }
-  
+
     _singlecolor = false;
     _rainbow = false;
 
 //  if (GLITTER_ON == true){addGlitter(glitter_density);}
 // //frame has been created, now show it
-  FastLED.show();  
+  FastLED.show();
   // insert a delay to keep the framerate modest
 //  FastLED.delay(int(float(1000/FPS)));
 }

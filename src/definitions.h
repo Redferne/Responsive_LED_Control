@@ -2,8 +2,8 @@
 // Griswold LED Lighting Controller
 
 // Griswold is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as 
-// published by the Free Software Foundation, either version 3 of 
+// it under the terms of the GNU Lesser General Public License as
+// published by the Free Software Foundation, either version 3 of
 // the License, or (at your option) any later version.
 
 // This program is distributed in the hope that it will be useful,
@@ -14,7 +14,7 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-// Griswold is a fork of the LEDLAMP project at 
+// Griswold is a fork of the LEDLAMP project at
 //        https://github.com/russp81/LEDLAMP_FASTLEDs
 
 // The LEDLAMP project is a fork of the McLighting Project at
@@ -40,7 +40,7 @@
 //      #endif
 
 #define FASTLED_INTERRUPT_RETRY_COUNT 3
-#include "FastLED.h"
+#include "FastLED.h" // With ESP32 RMT patch (https://github.com/FastLED/FastLED/pull/522)
 #if defined(FASTLED_VERSION) && (FASTLED_VERSION < 3001000)
 #warning "Requires FastLED 3.1 or later; check github for latest code."
 #endif
@@ -49,13 +49,17 @@
 
 //#define REMOTE_DEBUG
 
+#if defined(ESP32)
+#define DATA_PIN 19
+#else
 #define DATA_PIN 2
+#endif
 //#define CLK_PIN   4
-#define LED_TYPE WS2812B
+#define LED_TYPE WS2813 // WS2812B
 #define COLOR_ORDER GRB
-#define NUM_LEDS 120
-#define MAX_CURRENT 2000  // limit to max current
-#define FASTLED_HZ 100    // maximum FASTLED refresh rate ( default = 400)
+#define NUM_LEDS 948
+#define MAX_CURRENT 40000  // limit to max current
+#define FASTLED_HZ 200    // maximum FASTLED refresh rate ( default = 400)
 CRGB leds[NUM_LEDS];
 
 #define ARRAY_SIZE(A) (sizeof(A) / sizeof((A)[0]))
@@ -80,7 +84,7 @@ enum MODE { HOLD,
     FIREWORKS,
     FIREWORKS_SINGLE,
     FIREWORKS_RAINBOW,};
-    
+
 enum DIRECTION {
   BACK = 0,
   FORWARD = 1, };
