@@ -20,6 +20,10 @@
 // The LEDLAMP project is a fork of the McLighting Project at
 //        https://github.com/toblum/McLighting
 
+
+#define ENABLE_TEMPSENSE
+#define ENABLE_LIGHTSENSE
+
 // ***************************************************************************
 // Load libraries for: WebServer / WiFiManager / WebSockets
 // ***************************************************************************
@@ -27,10 +31,13 @@
 #include <WiFi.h>
 #ifndef BUILTIN_LED
 #define BUILTIN_LED 2
+#define KEY_BUTTON 0
 #endif
 #else
 #include <ESP8266WiFi.h>  //https://github.com/esp8266/Arduino
 #endif
+
+#include <Wire.h>
 
 // needed for library WiFiManager
 #include <DNSServer.h> // ESP32 -> https://github.com/zhouhan0126/DNSServer---esp32.git
@@ -51,6 +58,15 @@
 
 #include <WebSockets.h>  //https://github.com/Links2004/arduinoWebSockets (esp32 branch)
 #include <WebSocketsServer.h>
+
+#ifdef ENABLE_TEMPSENSE
+#include <EnvironmentCalculations.h>
+#include <BME280I2C.h>
+#endif
+
+#ifdef ENABLE_LIGHTSENSE
+#include <BH1750.h>
+#endif
 
 // ***************************************************************************
 // Sub-modules of this application
@@ -75,16 +91,56 @@ ESP8266WebServer server(80);
 #endif
 WebSocketsServer webSocket = WebSocketsServer(81);
 
+#ifdef ENABLE_TEMPSENSE
+BME280I2C::Settings bme_settings(
+   BME280::OSR_X1,
+   BME280::OSR_X1,
+   BME280::OSR_X1,
+   BME280::Mode_Forced,
+   BME280::StandbyTime_1000ms,
+   BME280::Filter_Off,
+   BME280::SpiEnable_False,
+   0x76
+);
+BME280I2C bme(bme_settings);
+float temp, hum, baro, alt, dew, sea;
+#endif
+
+#ifdef ENABLE_LIGHTSENSE
+BH1750 bhl(0x23);
+uint16_t lux;
+#endif
+
 // ***************************************************************************
 // Load library SimpleTimer for blinking status led
 // ***************************************************************************
 SimpleTimer timer;
 int ticker;
+bool led_state;
 
 void tick() {
   // toggle state
-  int state = digitalRead(BUILTIN_LED);  // get the current state of GPIO1 pin
-  digitalWrite(BUILTIN_LED, !state);     // set pin to the opposite state
+  led_state = !led_state;
+  digitalWrite(BUILTIN_LED, led_state);
+}
+
+
+void Every5Second() {
+  DBG_OUTPUT_PORT.printf("FreeHeap: %d\n", ESP.getFreeHeap());
+
+  #ifdef ENABLE_LIGHTSENSE
+  lux = bhl.readLightLevel();
+  #else
+  lux = 0;
+  #endif
+
+  #ifdef ENABLE_TEMPSENSE
+  bme.read(baro, temp, hum, BME280::TempUnit_Celsius, BME280::PresUnit_hPa); // hPa
+  alt = EnvironmentCalculations::Altitude(baro, EnvironmentCalculations::AltitudeUnit_Meters);
+  dew = EnvironmentCalculations::DewPoint(temp, hum, EnvironmentCalculations::TempUnit_Celsius);
+  sea = EnvironmentCalculations::EquivalentSeaLevelPressure(alt, temp, baro);
+  DBG_OUTPUT_PORT.printf("T: %.2f H: %.2f A: %.2f B: %.2f L: %d\n", temp, hum, alt, baro, lux);
+  #endif
 }
 
 // ***************************************************************************
@@ -158,8 +214,30 @@ void setup() {
   #endif
 
 
+  #if defined(ESP32) || defined(ESP8266)
+  Wire.begin();
+  Wire.setClock(100000); // choose 100 kHz I2C rate
+  #endif
+  if(bme.begin() == false) {
+    Serial.println(F("FAIL!"));
+  }
+  switch(bme.chipModel())
+  {
+    case BME280::ChipModel_BME280:
+      Serial.println("Found BME280 sensor! Success.");
+      break;
+    case BME280::ChipModel_BMP280:
+      Serial.println("Found BMP280 sensor! No Humidity available.");
+      break;
+    default:
+      Serial.println("Found UNKNOWN sensor! Error!");
+  }
+
+  bhl.begin(BH1750_CONTINUOUS_HIGH_RES_MODE);
+
   // set builtin led pin as output
   pinMode(BUILTIN_LED, OUTPUT);
+  pinMode(KEY_BUTTON, INPUT);
   // start timer with 500ms because we start in AP mode and try to connect
   ticker = timer.setInterval(500, tick);
  // ***************************************************************************
@@ -168,7 +246,7 @@ void setup() {
   delay(500);  // 500ms delay for recovery
 
   // limit my draw to 2.1A at 5v of power draw
-  FastLED.setMaxPowerInVoltsAndMilliamps(5,MAX_CURRENT);
+  FastLED.setMaxPowerInVoltsAndMilliamps(5, MAX_CURRENT);
 
   // maximum refresh rate
   FastLED.setMaxRefreshRate(FASTLED_HZ);
@@ -182,6 +260,9 @@ void setup() {
   // set master brightness control
   FastLED.setBrightness(settings.overall_brightness);
 
+  fill_solid(leds, NUM_LEDS, CRGB(0,0,0));
+
+  FastLED.show();
 
   // ***************************************************************************
   // Setup: WiFiManager
@@ -191,6 +272,15 @@ void setup() {
   WiFiManager wifiManager;
   // reset settings - for testing
   // wifiManager.resetSettings();
+
+  digitalWrite(BUILTIN_LED, HIGH);
+  delay(1000);  // delay for checking WIFI reset
+
+  if (!digitalRead(KEY_BUTTON)) {
+    DBG_OUTPUT_PORT.println("Key is pressed, reset WIFI config...");
+    wifiManager.resetSettings();
+    ESP.restart();
+  }
 
   // set callback that gets called when connecting to previous WiFi fails, and
   // enters Access Point mode
@@ -224,6 +314,10 @@ void setup() {
   // ***************************************************************************
   ArduinoOTA.setHostname(hostname);
   ArduinoOTA.onStart([]() {
+
+    // Kill LEDs...
+    fill_solid(leds, NUM_LEDS, CRGB(0,0,0));
+    FastLED.show();
 
     String type;
 //    if (ArduinoOTA.getCommand() == U_FLASH)
@@ -549,6 +643,9 @@ server.on("/fire", []() {
   server.begin();
 
   paletteCount = getPaletteCount();
+
+  timer.setInterval(5000, Every5Second);
+
 }
 
 static long int avg_time = 0;

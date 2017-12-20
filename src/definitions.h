@@ -45,7 +45,7 @@
 #warning "Requires FastLED 3.1 or later; check github for latest code."
 #endif
 
-#define HOSTNAME_PREFIX "LEDCONTROL"
+#define HOSTNAME_PREFIX "JULGRAN"
 
 //#define REMOTE_DEBUG
 
