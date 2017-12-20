@@ -147,7 +147,6 @@ void ChangePalettePeriodically(bool forceNow) {
 
     loadPaletteFromFile(targetPaletteIndex, &targetPalette);
 
-    settings.palette_ndx = targetPaletteIndex;
     DBG_OUTPUT_PORT.printf("New palette index: %d\n", targetPaletteIndex);
 
     if (settings.glitter_wipe_on) {
