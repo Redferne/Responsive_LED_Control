@@ -1,40 +1,48 @@
-# doctormord's Responsive Led Control
-I mixed the work of [McLighting](https://github.com/toblum/McLighting), [Russell](https://github.com/russp81/LEDLAMP_FASTLEDs) and [Jake's "Grisworld"](https://github.com/jake-b/Griswold-LED-Controller) with [FastLED](https://github.com/FastLED/FastLED) (FastLED library 3.1.3 as of this writing), the colorjs colorpicker, color spectrums created via FastLED Palette Knife, and some additional strip animations (included in the Arduino Sketch above).
+# doctormord's Responsive Led Control (for ESP8266/ESP32)
+doctormord mixed the work of [McLighting](https://github.com/toblum/McLighting), [Russell](https://github.com/russp81/LEDLAMP_FASTLEDs) and [Jake's "Grisworld"](https://github.com/jake-b/Griswold-LED-Controller) with [FastLED](https://github.com/FastLED/FastLED) (FastLED library 3.1.3 as of this writing), the colorjs colorpicker, color spectrums created via FastLED Palette Knife, and some additional strip animations (included in the Arduino Sketch above).
 
-FastLED 3.1.3 library:
-https://github.com/FastLED/FastLED
+Credit goes to the following pioneers (including but not limited to the required libraries):
 
-McLighting library:
+* McLighting library:
 https://github.com/toblum/McLighting
-
-Russel's implementation:
+* Russel's implementation:
 https://github.com/russp81/LEDLAMP_FASTLEDs
-
-Jakes's "Grisworld" Led Controller
+* Jakes's "Grisworld" Led Controller
 https://github.com/jake-b/Griswold-LED-Controller
-
-jscolor Color Picker:
+* jscolor Color Picker:
 http://jscolor.com/
-
-FastLED Palette Knife:
+* FastLED Palette Knife:
 http://fastled.io/tools/paletteknife/
 
-RemoteDebug:
+These libraries are required for doctormord's Responsive Led Control.
+Please make sure they are installed in the Arduino libraries folder.
+
+* FastLED 3.001.006 library
+https://github.com/FastLED/FastLED
+For ESP32 RMT support, pull this https://github.com/FastLED/FastLED/pull/522 (unless it's already merged)
+* RemoteDebug
 https://github.com/JoaoLopesF/RemoteDebug
+* SimpleTimer
+https://github.com/schinken/SimpleTimer.git
+* WifiManager
+https://github.com/bbx10/WiFiManager.git (esp32 branch if needed)
+* DNSServer (ESP32)
+https://github.com/zhouhan0126/DNSServer---esp32.git
+* Arduino Websockets
+https://github.com/Links2004/arduinoWebSockets (esp32 branch if needed)
 
+Setup your ESP, see the readme on McLighting's git. Or there are many guides available online.
 
-If you aren't familiar with how to setup your ESP8266, see the readme on McLighting's git.  It's well written and should get you up and running.
+In short:
 
-In short you will:
-
-1.  Configure the Arduino IDE to communicate with the ESP8266
-2.  Upload the sketch (from this repo) The sketch is setup for a 120 pixel WS2812B GRB LED Strip.   
-    (change the applicable options in "definitions.h" to your desire)
+1.  Configure the Arduino IDE / PlatformIO to communicate with the ESP
+2.  Build & Upload the code (from this repo) The default setup is for a 948! pixel WS2813 GRB LED Strip.   
+    (change the applicable options in "definitions.h" to suit the specific implementation first!)
 3.  Patch FastLED Library
 
 ```arduino
-// Note, you need to patch FastLEDs in order to use this.  You'll get an
-// error related to <avr\pgmspace.h>. Saves more than 3k given the palettes
+// A FastLED patch is needed in order to use this.
+// Saves more than 3k given the palettes
 //
 // Simply edit <fastled_progmem.h> and update the include (Line ~29):
 
@@ -47,13 +55,11 @@ In short you will:
 #endif
 ```
 
-4.  On first launch, the ESP8266 will advertise it's own WiFi network for you to connect to, once you connect to it, launch your browser
-    and the web interface is self explanatory.  (If the interface doesn't load, type in "192.168.4.1" into your browser and hit go)
-5.  Once the ESP is on your wifi network, you can then upload the required files for the web interface by typing the in IP address
-    of the ESP followed by "/edit" (i.e. 192.168.1.20/edit).  Then upload the files from the folder labeled "upload these" from this         repo. 
-6.  Once you have finished uploading, type in the IP of the ESP into your browser and you should be up and running!
+4.  On first launch, the ESP will advertise it's own WiFi network (AP Mode) with the prefixed hostname in definitions.h *Please note that during first boot on ESP32 the SPIFFS filesystem is created and formatted, this can take a few minutes* Connect to this WiFi network and click here -> http://192.168.4.1 to access the ESP WifiManager. Configure the ESP to login to the nearest available WiFi network. 
+5.  Once the ESP (as Station) is connected to the WiFi network, upload the required files for the web interface by typing the in IP address of the ESP followed by "/edit" (i.e. http://192.168.1.20/edit).  Then upload the files from the folder **upload_to_ESP_SPIFFS_or_SD**. The palettes directory is created by the entering "/palettes" and clicking on **Create**
+6.  Now the ESP is ready for action. Enter it's IP the browser (i.e. http://192.168.1.20) and configure away ;-)
 
-Forked from Russel, i removed Adafruit Neopixel references and library calls.
+Forked from Russel, Adafruit Neopixel references and library calls are removed.
 
 # Improvements/changes so far:
 
@@ -66,7 +72,7 @@ Forked from Russel, i removed Adafruit Neopixel references and library calls.
 * made the UI more responsive with grouped sections and buttons
 * added some more palettes
 * integrated Arduino OTA
-
+* ESP32 support, with buttery smooth animations using Sam Guyer and Thomas Basler RMT implementation for FastLED
 Large Screen (Desktop)
 
 ![Large Screen](https://github.com/doctormord/Responsive_LED_Control/raw/master/documentation/large50.png)
@@ -75,13 +81,9 @@ Small Screen (Mobile)
 
 ![Small Screen](https://github.com/doctormord/Responsive_LED_Control/raw/master/documentation/small50.png)
 
-
-~~I edited clockless_esp8266.h (in the FastLED platforms folder) and 
-kept getting flickering until I incremented the WAIT_TIME up to 18us. 
-(also I did "#define FASTLED_INTERRUPT_RETRY_COUNT 3" inside my sketch).~~
-
 For reference, interrupts issue:  https://github.com/FastLED/FastLED/issues/306
 
+ESP32 RMT implementation: https://github.com/FastLED/FastLED/issues/504
 # License
 
 As per the original [McLighting](https://github.com/toblum/McLighting) and [Jake's "Grisworld"](https://github.com/jake-b/Griswold-LED-Controller) project, this project is released under the GNU LESSER GENERAL PUBLIC LICENSE Version 3, 29 June 2007.
