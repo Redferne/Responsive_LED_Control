@@ -47,18 +47,18 @@
 
 #define HOSTNAME_PREFIX "JULGRAN"
 
-//#define REMOTE_DEBUG
+#define REMOTE_DEBUG
 
 #if defined(ESP32)
-#define DATA_PIN 19
+#define DATA_PIN 2 // 19
 #else
 #define DATA_PIN 2
 #endif
 //#define CLK_PIN   4
 #define LED_TYPE WS2813 // WS2812B
 #define COLOR_ORDER GRB
-#define NUM_LEDS 948
-#define MAX_CURRENT 40000  // limit to max current
+#define NUM_LEDS 1497 //948 458, 546
+#define MAX_CURRENT 54000  // limit to max current
 #define FASTLED_HZ 200    // maximum FASTLED refresh rate ( default = 400)
 CRGB leds[NUM_LEDS];
 
@@ -83,7 +83,8 @@ enum MODE { HOLD,
     FIRE_RAINBOW,
     FIREWORKS,
     FIREWORKS_SINGLE,
-    FIREWORKS_RAINBOW,};
+    FIREWORKS_RAINBOW,
+    SOUND_SENSE,};
 
 enum DIRECTION {
   BACK = 0,
@@ -96,7 +97,7 @@ enum DIRECTION {
 //uint8_t show_length = 15;       // Global variable for storing the show_time (in seconds)
 //uint8_t ftb_speed = 50;         // Global variable for fade to black speed
 //uint8_t glitter_density = 50;   // Global variable for glitter density
-long lastMillis = 0; // Global variable for timechecking last show cycle time
+uint32_t lastMillis = 0; // Global variable for timechecking last show cycle time
 long theaterMillis = 0;
 long paletteMillis = 0; // Global variable for timechecking color palette shifts
 //bool exit_func = false; // Global helper variable to get out of the color modes when mode changes

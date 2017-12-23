@@ -23,6 +23,9 @@
 
 #define ENABLE_TEMPSENSE
 #define ENABLE_LIGHTSENSE
+#define ENABLE_SOUNDSENSE
+#define ENABLE_WIFIMANAGER
+#define ENABLE_ALEXA
 
 // ***************************************************************************
 // Load libraries for: WebServer / WiFiManager / WebSockets
@@ -32,6 +35,7 @@
 #ifndef BUILTIN_LED
 #define BUILTIN_LED 2
 #define KEY_BUTTON 0
+#define AUDIO_PIN 33
 #endif
 #else
 #include <ESP8266WiFi.h>  //https://github.com/esp8266/Arduino
@@ -42,7 +46,16 @@
 // needed for library WiFiManager
 #include <DNSServer.h> // ESP32 -> https://github.com/zhouhan0126/DNSServer---esp32.git
 #include <ESP8266WebServer.h>
+
+#ifdef ENABLE_WIFIMANAGER
 #include <WiFiManager.h>  // https://github.com/bbx10/WiFiManager.git (esp32 branch)
+#endif
+
+#ifdef ENABLE_ALEXA
+#include "WemoSwitch.h"
+#include "WemoManager.h"
+#include "CallbackFunction.h"
+#endif
 
 #include <ArduinoOTA.h>
 #if defined (ESP32)
@@ -80,6 +93,8 @@
 // Forward Declarations
 // ***************************************************************************
 void nextPattern(void);
+void TreeOff(void);
+void TreeOn(void);
 
 // ***************************************************************************
 // Instanciate HTTP(80) / WebSockets(81) Server
@@ -109,6 +124,18 @@ float temp, hum, baro, alt, dew, sea;
 #ifdef ENABLE_LIGHTSENSE
 BH1750 bhl(0x23);
 uint16_t lux;
+#endif
+
+#ifdef ENABLE_ALEXA
+WemoManager wemoManager;
+WemoSwitch *xtree = NULL;
+#endif
+
+#ifndef ENABLE_WIFIMANAGER
+//const char* wifi_ssid     = "Hagaberg9";
+//const char* wifi_password = "Bellastrix";
+const char* wifi_ssid     = "TeliaGatewayA4-B1-E9-58-DB-67";
+const char* wifi_password = "403B269D33";
 #endif
 
 // ***************************************************************************
@@ -147,6 +174,7 @@ void Every5Second() {
 // Callback for WiFiManager library when config mode is entered
 // ***************************************************************************
 // gets called when WiFiManager enters configuration mode
+#ifdef ENABLE_WIFIMANAGER
 void configModeCallback(WiFiManager *myWiFiManager) {
   DBG_OUTPUT_PORT.println("Entered config mode");
   DBG_OUTPUT_PORT.println(WiFi.softAPIP());
@@ -162,6 +190,7 @@ void configModeCallback(WiFiManager *myWiFiManager) {
   }
   FastLED.show();
 }
+#endif
 
 // ***************************************************************************
 // Include: Webserver & Request Handlers
@@ -183,11 +212,6 @@ void setup() {
   uint16_t chipid = ESP.getChipId() & 0xFFFF;
   sprintf(hostname, "%s-%04x",HOSTNAME_PREFIX, chipid);
   #endif
-#ifdef REMOTE_DEBUG
-  Debug.begin(hostname);  // Initiaze the telnet server - hostname is the used
-                          // in MDNS.begin
-  Debug.setResetCmdEnabled(true);  // Enable the reset command
-#endif
 
   // ***************************************************************************
   // Setup: EEPROM
@@ -206,6 +230,8 @@ void setup() {
 
 #ifndef REMOTE_DEBUG
   DBG_OUTPUT_PORT.begin(115200);
+  DBG_OUTPUT_PORT.setDebugOutput(true);
+
 #endif
   #if defined(ESP32)
   DBG_OUTPUT_PORT.printf("system_get_cpu_freq: %d\n", ESP.getCpuFreqMHz());
@@ -238,12 +264,27 @@ void setup() {
   // set builtin led pin as output
   pinMode(BUILTIN_LED, OUTPUT);
   pinMode(KEY_BUTTON, INPUT);
+
+  #ifdef ENABLE_SOUNDSENSE
+  pinMode(AUDIO_PIN, INPUT);
+  analogReadResolution(12); // Default of 12 is not very linear. Recommended to use 10 or 11 depending on needed resolution.
+  analogSetAttenuation(ADC_11db);
+/*
+    ADC_0db,
+    ADC_2_5db,
+    ADC_6db,
+    ADC_11db
+*/
+  #endif
+
   // start timer with 500ms because we start in AP mode and try to connect
   ticker = timer.setInterval(500, tick);
  // ***************************************************************************
   // Setup: FASTLED
   // ***************************************************************************
   delay(500);  // 500ms delay for recovery
+
+  WiFi.disconnect(true);
 
   // limit my draw to 2.1A at 5v of power draw
   FastLED.setMaxPowerInVoltsAndMilliamps(5, MAX_CURRENT);
@@ -269,10 +310,24 @@ void setup() {
   // ***************************************************************************
   // Local intialization. Once its business is done, there is no need to keep it
   // around
+
+  #ifndef ENABLE_WIFIMANAGER
+  //WiFi.setDebugOutput(true);
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.begin(wifi_ssid, wifi_password);
+
+  while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
+  }
+
+  Serial.println("Our IP: ");
+  Serial.println(WiFi.localIP());
+  #else
+
   WiFiManager wifiManager;
   // reset settings - for testing
   // wifiManager.resetSettings();
-
   digitalWrite(BUILTIN_LED, HIGH);
   delay(1000);  // delay for checking WIFI reset
 
@@ -281,6 +336,8 @@ void setup() {
     wifiManager.resetSettings();
     ESP.restart();
   }
+
+  wifiManager.setDebugOutput(true);
 
   // set callback that gets called when connecting to previous WiFi fails, and
   // enters Access Point mode
@@ -291,6 +348,7 @@ void setup() {
   // here  "AutoConnectAP"
   // and goes into a blocking loop awaiting configuration
 
+  wifiManager.setConnectTimeout(30);
 
   if (!wifiManager.autoConnect(hostname)) {
     DBG_OUTPUT_PORT.println("failed to connect and hit timeout");
@@ -302,6 +360,7 @@ void setup() {
     #endif
     delay(1000);
   }
+  #endif
 
   // if you get here you have connected to the WiFi
   DBG_OUTPUT_PORT.println("connected...yeey :)");
@@ -364,6 +423,13 @@ void setup() {
   DBG_OUTPUT_PORT.print("Open http://");
   DBG_OUTPUT_PORT.print(hostname);
   DBG_OUTPUT_PORT.println(".local/edit to see the file browser");
+
+
+  #ifdef REMOTE_DEBUG
+    Debug.begin(hostname);  // Initiaze the telnet server - hostname is the used
+                            // in MDNS.begin
+    Debug.setResetCmdEnabled(true);  // Enable the reset command
+  #endif
 
   // ***************************************************************************
   // Setup: WebSocket server
@@ -462,8 +528,10 @@ void setup() {
   server.on("/reset_wlan", []() {
     DBG_OUTPUT_PORT.printf("/reset_wlan:\n");
     server.send(200, "text/plain", "Resetting WLAN and restarting...");
+    #ifdef ENABLE_WIFIMANAGER
     WiFiManager wifiManager;
     wifiManager.resetSettings();
+    #endif
     ESP.restart();
   });
 
@@ -625,6 +693,13 @@ server.on("/fire", []() {
     getStatusJSON();
   });
 
+  server.on("/soundsense", []() {
+    //exit_func = true;
+    settings.mode = SOUND_SENSE;
+    getArgs();
+    getStatusJSON();
+  });
+
   server.on("/palette_anims", []() {
     settings.mode = PALETTE_ANIMS;
     if (server.arg("p") != "") {
@@ -644,12 +719,33 @@ server.on("/fire", []() {
 
   paletteCount = getPaletteCount();
 
+#ifdef ENABLE_ALEXA
+  wemoManager.begin();
+  // Format: Alexa invocation name, local port no, on callback, off callback
+  xtree = new WemoSwitch("christmas tree", 82, TreeOn, TreeOff);
+//  second = new WemoSwitch("second lights", 82, secondOn, secondOff);
+  wemoManager.addDevice(*xtree);
+//  wemoManager.addDevice(*second);
+#endif
+
   timer.setInterval(5000, Every5Second);
 
 }
 
+void TreeOff() {
+  DBG_OUTPUT_PORT.printf("Alexa: OFF\n");
+  settings.mode = OFF;
+}
+
+void TreeOn() {
+  DBG_OUTPUT_PORT.printf("Alexa: MIXEDSHOW\n");
+  settings.mode = MIXEDSHOW;
+}
+
 static long int avg_time = 0;
 static uint32_t avg_cnt = 0;
+static uint32_t palette_timer = 5;
+static uint32_t palette_tick = 0;
 
 void loop() {
   EVERY_N_MILLISECONDS(int(float(1000 / settings.fps))) {
@@ -657,6 +753,10 @@ void loop() {
   }
 
   timer.run();
+
+  #ifdef ENABLE_ALEXA
+  wemoManager.serverLoop();
+  #endif
 
   // Simple statemachine that handles the different modes
   switch (settings.mode) {
@@ -675,14 +775,21 @@ void loop() {
         gPatterns[gCurrentPatternNumber]();
 
         // send the 'leds' array out to the actual LED strip
-        int showlength_Millis = settings.show_length * 1000;
+        uint32_t showlength_Millis = settings.show_length * 1000;
 
         // DBG_OUTPUT_PORT.println("showlengthmillis = " +
         // String(showlength_Millis));
         if (((millis()) - (lastMillis)) >= showlength_Millis) {
           nextPattern();
-          DBG_OUTPUT_PORT.println( "void nextPattern was called at " + String(millis()) +
-            " and the current show length set to " + String(showlength_Millis));
+          DBG_OUTPUT_PORT.printf("nextPattern: %d\n", gCurrentPatternNumber);
+          // Also randomize palettes
+          if (settings.palette_ndx == -1) {
+            if (palette_tick++ >= palette_timer) {
+              uint32_t palette_timer = 5 + random(32);
+              palette_tick = 0;
+              ChangePalettePeriodically(true);
+            }
+          }
         }
       }
       break;
@@ -750,10 +857,15 @@ void loop() {
     case FIREWORKS_RAINBOW:
       fw_rainbow();
       break;
+
+    case SOUND_SENSE:
+      soundsense();
+      break;
+
   }
 
   // Add glitter if necessary
-  if (settings.glitter_on == true) {
+  if (settings.glitter_on == true && settings.mode != OFF) {
     addGlitter(settings.glitter_density);
   }
 

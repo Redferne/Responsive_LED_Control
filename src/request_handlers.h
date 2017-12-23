@@ -121,9 +121,14 @@ char json_buf[512];
 
 void listStatusJSON() {
   File file;
-  openPaletteFileWithIndex(currentPaletteIndex, &file);
-  snprintf_P(json_buf, sizeof(json_buf), PSTR("{\"mode\":%d, \"FPS\":%d,\"show_length\":%d, \"ftb_speed\":%d, \"overall_brightness\":%d, \"effect_brightness\":%d, \"color\":[%d, %d, %d], \"glitter_color\":[%d,%d,%d], \"glitter_density\":%d, \"glitter_on\":%d, \"confetti_density\":%d, \"palette_name\": \"%s\", \"glitter_wipe_on\": %d}"), settings.mode, settings.fps, settings.show_length, settings.ftb_speed, settings.overall_brightness, settings.effect_brightness, settings.main_color.red, settings.main_color.green, settings.main_color.blue, settings.glitter_color.red, settings.glitter_color.green, settings.glitter_color.blue, settings.glitter_density, settings.glitter_on, settings.confetti_dens, file.name(), settings.glitter_wipe_on);
-  file.close();
+  String name;
+  if (openPaletteFileWithIndex(currentPaletteIndex, &file)) {
+    name = file.name();
+    file.close();
+  } else {
+    name = "Error!";
+  }
+  snprintf_P(json_buf, sizeof(json_buf), PSTR("{\"mode\":%d, \"FPS\":%d,\"show_length\":%d, \"ftb_speed\":%d, \"overall_brightness\":%d, \"effect_brightness\":%d, \"color\":[%d, %d, %d], \"glitter_color\":[%d,%d,%d], \"glitter_density\":%d, \"glitter_on\":%d, \"confetti_density\":%d, \"palette_name\": \"%s\", \"glitter_wipe_on\": %d}"), settings.mode, settings.fps, settings.show_length, settings.ftb_speed, settings.overall_brightness, settings.effect_brightness, settings.main_color.red, settings.main_color.green, settings.main_color.blue, settings.glitter_color.red, settings.glitter_color.green, settings.glitter_color.blue, settings.glitter_density, settings.glitter_on, settings.confetti_dens, name.c_str(), settings.glitter_wipe_on);
 }
 
 
@@ -345,6 +350,9 @@ void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length
         }
         if (str_mode.startsWith("=fwrainbow")) {
           settings.mode = FIREWORKS_RAINBOW;
+        }
+        if (str_mode.startsWith("=soundsensor")) {
+          settings.mode = SOUND_SENSE;
         }
         DBG_OUTPUT_PORT.printf("Activated mode [%u]!\n", settings.mode);
         webSocket.sendTXT(num, "OK");

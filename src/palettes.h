@@ -58,10 +58,8 @@ bool openPaletteFileWithIndex(int index, File* file) {
   #else
   while (dir.next()) {
   #endif
-    if (palette_count == index) {
-      DBG_OUTPUT_PORT.printf("Found file at index %d\n", palette_count);
+    if (palette_count == index)
       break;
-    }
     file->close();
     palette_count++;
   }
@@ -84,7 +82,6 @@ bool loadPaletteFromFile(int index, CRGBPalette16* palette) {
   }
 
   int paletteFileSize = paletteFile.size();
-  DBG_OUTPUT_PORT.printf("paletteFile size: %d\n", paletteFileSize);
   uint8_t* bytes = new uint8_t[paletteFileSize];
   if (!bytes) {
     DBG_OUTPUT_PORT.println("Unable to allocate memory for palette");
@@ -92,12 +89,10 @@ bool loadPaletteFromFile(int index, CRGBPalette16* palette) {
   }
 
   #if defined(ESP32)
-  DBG_OUTPUT_PORT.printf("Reading paletteFile...\n");
   paletteFile.read(bytes, paletteFileSize);
   #else
   paletteFile.readBytes((char*)bytes, paletteFileSize);
   #endif
-  DBG_OUTPUT_PORT.printf("Getting name paletteFile...\n");
 
   String fileName = paletteFile.name();
   DBG_OUTPUT_PORT.printf("Load palette named %s (%d bytes)\n", fileName.c_str(), paletteFileSize);
