@@ -66,7 +66,11 @@ bool handleFileRead(String path) {
     if (SPIFFS.exists(pathWithGz))
       path += ".gz";
     File file = SPIFFS.open(path, "r");
+    DBG_OUTPUT_PORT.println("handleFileRead: " + path);
+//    server.setContentLength(CONTENT_LENGTH_UNKNOWN);
     size_t sent = server.streamFile(file, contentType);
+    DBG_OUTPUT_PORT.print("Size: " + sent);
+    DBG_OUTPUT_PORT.println(sent);
     file.close();
     return true;
   }

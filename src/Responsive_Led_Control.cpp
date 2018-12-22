@@ -27,6 +27,10 @@
 #define ENABLE_WIFIMANAGER
 #define ENABLE_ALEXA
 
+/// Serial
+#define DEBUG_WEBSOCKETS(...) Serial.printf( __VA_ARGS__ )
+#include <FS.h>
+
 // ***************************************************************************
 // Load libraries for: WebServer / WiFiManager / WebSockets
 // ***************************************************************************
@@ -45,7 +49,6 @@
 
 // needed for library WiFiManager
 #include <DNSServer.h> // ESP32 -> https://github.com/zhouhan0126/DNSServer---esp32.git
-#include <ESP8266WebServer.h>
 
 #ifdef ENABLE_WIFIMANAGER
 #include <WiFiManager.h>  // https://github.com/bbx10/WiFiManager.git (esp32 branch)
@@ -60,14 +63,16 @@
 #include <ArduinoOTA.h>
 #if defined (ESP32)
 #include <ESPmDNS.h>
+#include "WebServer.h"
 #else
+#include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #endif
-#include <FS.h>
 #include <WiFiClient.h>
 
 #include <SimpleTimer.h>  //https://github.com/schinken/SimpleTimer.git
-#include "RemoteDebug.h" //https://github.com/JoaoLopesF/RemoteDebug
+#include <RemoteDebug.h> //https://github.com/JoaoLopesF/RemoteDebug
+#include <Ticker.h>
 
 #include <WebSockets.h>  //https://github.com/Links2004/arduinoWebSockets (esp32 branch)
 #include <WebSocketsServer.h>
@@ -126,23 +131,26 @@ BH1750 bhl(0x23);
 uint16_t lux;
 #endif
 
+uint32_t avg_time = 0;
+uint32_t avg_cnt = 0;
+uint32_t palette_timer = 0;
+uint32_t palette_tick = 0;
+
 #ifdef ENABLE_ALEXA
 WemoManager wemoManager;
 WemoSwitch *xtree = NULL;
 #endif
 
 #ifndef ENABLE_WIFIMANAGER
-//const char* wifi_ssid     = "Hagaberg9";
-//const char* wifi_password = "Bellastrix";
-const char* wifi_ssid     = "TeliaGatewayA4-B1-E9-58-DB-67";
-const char* wifi_password = "403B269D33";
+const char* wifi_ssid     = "Bellini";
+const char* wifi_password = "--------";
 #endif
 
 // ***************************************************************************
 // Load library SimpleTimer for blinking status led
 // ***************************************************************************
 SimpleTimer timer;
-int ticker;
+Ticker ticker;
 bool led_state;
 
 void tick() {
@@ -181,11 +189,11 @@ void configModeCallback(WiFiManager *myWiFiManager) {
   // if you used auto generated SSID, print it
   DBG_OUTPUT_PORT.println(myWiFiManager->getConfigPortalSSID());
   // entered config mode, make led toggle faster
-  ticker = timer.setInterval(200, tick);
+  ticker.attach(0.2, tick);
 
   // Show USER that module can't connect to stored WiFi
   uint16_t i;
-  for (i = 0; i < NUM_LEDS; i++) {
+  for (i = 0; i < 2; i++) {
     leds[i].setRGB(0, 0, 50);
   }
   FastLED.show();
@@ -277,8 +285,9 @@ void setup() {
 */
   #endif
 
-  // start timer with 500ms because we start in AP mode and try to connect
-  ticker = timer.setInterval(500, tick);
+  // start ticker with 500ms because we start in AP mode and try to connect
+  ticker.attach(0.5, tick);
+
  // ***************************************************************************
   // Setup: FASTLED
   // ***************************************************************************
@@ -287,13 +296,13 @@ void setup() {
   WiFi.disconnect(true);
 
   // limit my draw to 2.1A at 5v of power draw
-  FastLED.setMaxPowerInVoltsAndMilliamps(5, MAX_CURRENT);
+  FastLED.setMaxPowerInVoltsAndMilliamps(5,settings.max_current);
 
   // maximum refresh rate
   FastLED.setMaxRefreshRate(FASTLED_HZ);
 
   // tell FastLED about the LED strip configuration
-  FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, NUM_LEDS)
+  FastLED.addLeds<LED_TYPE, DATA_PIN, COLOR_ORDER>(leds, settings.num_leds)
       .setCorrection(TypicalLEDStrip);
 
   // FastLED.addLeds<LED_TYPE,DATA_PIN,CLK_PIN,COLOR_ORDER>(leds,
@@ -339,15 +348,21 @@ void setup() {
 
   wifiManager.setDebugOutput(true);
 
+  //sets timeout until configuration portal gets turned off
+  //useful to make it all retry or go to sleep
+  //in seconds
+  wifiManager.setTimeout(20);
+  wifiManager.setBreakAfterConfig(true);
+
   // set callback that gets called when connecting to previous WiFi fails, and
   // enters Access Point mode
   wifiManager.setAPCallback(configModeCallback);
+  
 
   // fetches ssid and pass and tries to connect
   // if it does not connect it starts an access point with the specified name
   // here  "AutoConnectAP"
   // and goes into a blocking loop awaiting configuration
-
   wifiManager.setConnectTimeout(30);
 
   if (!wifiManager.autoConnect(hostname)) {
@@ -363,8 +378,8 @@ void setup() {
   #endif
 
   // if you get here you have connected to the WiFi
-  DBG_OUTPUT_PORT.println("connected...yeey :)");
-  timer.disable(ticker);
+  DBG_OUTPUT_PORT.println("get the show started.. :)");
+  ticker.detach();
   // keep LED on
   digitalWrite(BUILTIN_LED, LOW);
 
@@ -419,11 +434,13 @@ void setup() {
   // ***************************************************************************
   // Setup: MDNS responder
   // ***************************************************************************
-  MDNS.begin(hostname);
-  DBG_OUTPUT_PORT.print("Open http://");
-  DBG_OUTPUT_PORT.print(hostname);
-  DBG_OUTPUT_PORT.println(".local/edit to see the file browser");
-
+  if (MDNS.begin(hostname)) {
+//    MDNS.addService("http", "tcp", 80);
+    MDNS.addService("_http", "_tcp", 80);
+    DBG_OUTPUT_PORT.print("Open http://");
+    DBG_OUTPUT_PORT.print(hostname);
+    DBG_OUTPUT_PORT.println(".local/edit to see the file browser");
+  }
 
   #ifdef REMOTE_DEBUG
     Debug.begin(hostname);  // Initiaze the telnet server - hostname is the used
@@ -738,35 +755,31 @@ void TreeOff() {
 }
 
 void TreeOn() {
-  DBG_OUTPUT_PORT.printf("Alexa: MIXEDSHOW\n");
+  DBG_OUTPUT_PORT.printf("Alexa: MIXEDSHOW\n");fb
   settings.mode = MIXEDSHOW;
 }
-
-static long int avg_time = 0;
-static uint32_t avg_cnt = 0;
-static uint32_t palette_timer = 5;
-static uint32_t palette_tick = 0;
 
 void loop() {
   EVERY_N_MILLISECONDS(int(float(1000 / settings.fps))) {
     gHue++;  // slowly cycle the "base color" through the rainbow
   }
 
-  timer.run();
-
   #ifdef ENABLE_ALEXA
   wemoManager.serverLoop();
   #endif
 
+  // adjust LED current to actual value;
+  FastLED.setMaxPowerInVoltsAndMilliamps(5,settings.max_current);
+
   // Simple statemachine that handles the different modes
   switch (settings.mode) {
     default:
-    case OFF:
-      fill_solid(leds, NUM_LEDS, CRGB(0,0,0));
+    case OFF: 
+      fill_solid(leds, settings.num_leds, CRGB(0,0,0));
       break;
-
-    case ALL:
-      fill_solid(leds, NUM_LEDS,  CRGB(settings.main_color.red, settings.main_color.green,
+      
+    case ALL: 
+      fill_solid(leds, settings.num_leds,  CRGB(settings.main_color.red, settings.main_color.green,
                          settings.main_color.blue));
       break;
 
@@ -783,13 +796,15 @@ void loop() {
           nextPattern();
           DBG_OUTPUT_PORT.printf("nextPattern: %d\n", gCurrentPatternNumber);
           // Also randomize palettes
+#if 1
           if (settings.palette_ndx == -1) {
             if (palette_tick++ >= palette_timer) {
-              uint32_t palette_timer = 5 + random(32);
+              palette_timer = 5 + random(32);
               palette_tick = 0;
               ChangePalettePeriodically(true);
             }
           }
+#endif
         }
       }
       break;
@@ -892,14 +907,14 @@ void loop() {
 
  if (WiFi.status() != WL_CONNECTED) {
       // Blink the LED quickly to indicate WiFi connection lost.
-      ticker = timer.setInterval(100, tick);
+      ticker.attach(0.1, tick);
 
       //EVERY_N_MILLISECONDS(1000) {
       //  int state = digitalRead(BUILTIN_LED);  // get the current state of GPIO1 pin
       //  digitalWrite(BUILTIN_LED, !state);
       // }
     } else {
-      timer.disable(ticker);
+      ticker.detach();
       // Light on-steady indicating WiFi is connected.
       //digitalWrite(BUILTIN_LED, false);
     }

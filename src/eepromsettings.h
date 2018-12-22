@@ -29,19 +29,21 @@
 #pragma pack(1)     // set alignment to 1 byte boundary
 typedef struct {
   MODE mode;
-  uint8_t fps = 50;  // Global variable for storing the frames per second
+  uint8_t fps = 100;  // Global variable for storing the frames per second
   uint8_t overall_brightness = 255;  // Global variable for storing the brightness (255 == 100%)
   uint8_t show_length = 15;  // Global variable for storing the show_time (in seconds)
   uint8_t ftb_speed = 50;        // Global variable for fade to black speed
   uint8_t glitter_density = 50;  // Global variable for glitter density
-  bool glitter_on = false;  // Global to add / remove glitter to any animation
+  bool glitter_on = true;  // Global to add / remove glitter to any animation
   LEDState main_color;  // Store the "main color" of the strip used in single
   // color modes
   LEDState glitter_color;  // Store the "glitter color" of the strip for glitter mode
   uint8_t effect_brightness = 255;  // Brightness used for effect animations
   int8_t palette_ndx = -1; // Palette to use for PALETTE_ANIMS.  -1 is change periodically
   uint8_t confetti_dens = 1;  // Density for the confetti effect.  More confetti needed for longer strings.
-  bool glitter_wipe_on = false;
+  bool glitter_wipe_on = true;
+  uint16_t num_leds = 948; // number of connected leds
+  uint16_t max_current = 60000; // maximum allowed current in milliamperes
   uint8_t filler[46];  // in case adding data in config avoiding loosing current conf by bad crc
   uint16_t crc;
 } EEPROMSettings;
@@ -63,18 +65,20 @@ uint16_t crc16Update(uint16_t crc, uint8_t a) {
 
 void loadDefaults() {
   settings.mode = OFF;
-  settings.fps = 50;  // Global variable for storing the frames per second
+  settings.fps = 100;  // Global variable for storing the frames per second
   settings.overall_brightness = 255;  // Global variable for storing the brightness (255 == 100%)
   settings.effect_brightness = 128;  // Global variable for storing the palette brightness (255 == 100%)
   settings.show_length = 15;  // Global variable for storing the show_time (in seconds)
   settings.ftb_speed = 50;        // Global variable for fade to black speed
   settings.glitter_density = 50;  // Global variable for glitter density
-  settings.glitter_on = false;  // Global to add / remove glitter to any animation
+  settings.glitter_on = true;  // Global to add / remove glitter to any animation
   settings.main_color = { 128, 128, 128};  // Store the "main color" of the strip used in single color modes
   settings.glitter_color = {128, 128, 128};
   settings.palette_ndx = -1;
   settings.confetti_dens = 1;
   settings.glitter_wipe_on = false;
+  settings.num_leds = 948;
+  settings.max_current = 60000;
 }
 
 bool readSettings(bool clear_on_error) {
@@ -178,6 +182,10 @@ void printSettings() {
                          settings.glitter_color.green, settings.glitter_color.blue);
   DBG_OUTPUT_PORT.printf("palette_ndx:        %d\n", settings.palette_ndx); // selected palette
   DBG_OUTPUT_PORT.printf("confetti_dens:      %d\n", settings.confetti_dens); // selected palette
+  DBG_OUTPUT_PORT.printf("numleds:    %d\n",
+                         settings.num_leds);  // Global variable for number of leds
+  DBG_OUTPUT_PORT.printf("maxcurrent:    %d\n",
+                         settings.max_current);  // Global variable for glitter density                       
 }
 
 void initSettings() {
